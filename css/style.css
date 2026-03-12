@@ -1,0 +1,759 @@
+/**
+ * 样式文件
+ */
+
+/* 全局样式 */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    color: #e0e0e0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* 头部 */
+header {
+    width: 100%;
+    padding: 20px;
+    background: rgba(0, 0, 0, 0.3);
+    text-align: center;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+header h1 {
+    font-size: 2rem;
+    background: linear-gradient(90deg, #00ff88, #00cc6a);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+/* 主容器 */
+main {
+    width: 100%;
+    max-width: 1400px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+/* 控制面板 */
+.controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    align-items: center;
+    justify-content: center;
+    padding: 15px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+}
+
+.controls button {
+    padding: 10px 25px;
+    font-size: 1rem;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-weight: bold;
+}
+
+.controls button.primary {
+    background: linear-gradient(135deg, #00ff88, #00cc6a);
+    color: #1a1a2e;
+}
+
+.controls button.primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 20px rgba(0, 255, 136, 0.3);
+}
+
+.controls button.secondary {
+    background: rgba(255, 255, 255, 0.1);
+    color: #e0e0e0;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.controls button.secondary:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.controls button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none !important;
+}
+
+/* 速度控制 */
+.speed-control {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.speed-control label {
+    font-size: 0.9rem;
+}
+
+.speed-control input[type="range"] {
+    width: 120px;
+    accent-color: #00ff88;
+}
+
+.speed-value {
+    min-width: 30px;
+    text-align: center;
+    font-weight: bold;
+    color: #00ff88;
+}
+
+/* 游戏区域 */
+.game-area {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+/* 游戏画布容器 */
+.game-container {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 10px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: all 0.3s ease;
+}
+
+.game-container.best {
+    border-color: #00ff88;
+    box-shadow: 0 0 20px rgba(0, 255, 136, 0.3);
+}
+
+.game-container canvas {
+    border-radius: 5px;
+}
+
+.game-container .info {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+    font-size: 0.8rem;
+    color: #aaa;
+}
+
+.game-container .info .rank {
+    color: #00ff88;
+    font-weight: bold;
+}
+
+.game-container .info .score {
+    color: #ff6b6b;
+}
+
+/* 统计面板 */
+.stats-panel {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+    padding: 20px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+}
+
+.stat-item {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.stat-item .label {
+    font-size: 0.85rem;
+    color: #888;
+}
+
+.stat-item .value {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #00ff88;
+}
+
+.stat-item .value.highlight {
+    color: #ff6b6b;
+}
+
+/* 排行榜 */
+.leaderboard {
+    padding: 20px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+}
+
+.leaderboard h3 {
+    margin-bottom: 15px;
+    color: #00ff88;
+}
+
+.leaderboard table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.leaderboard th,
+.leaderboard td {
+    padding: 10px;
+    text-align: left;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.leaderboard th {
+    color: #888;
+    font-weight: normal;
+    font-size: 0.85rem;
+}
+
+.leaderboard td:first-child {
+    color: #00ff88;
+    font-weight: bold;
+}
+
+/* 模态框 */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.modal.active {
+    display: flex;
+}
+
+.modal-content {
+    background: #1a1a2e;
+    padding: 30px;
+    border-radius: 15px;
+    max-width: 500px;
+    width: 90%;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.modal-content h3 {
+    margin-bottom: 20px;
+    color: #00ff88;
+}
+
+.modal-content .model-list {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.modal-content .model-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.modal-content .model-item:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.modal-content .close-btn {
+    margin-top: 20px;
+    width: 100%;
+}
+
+/* 加载动画 */
+.loading {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 40px;
+}
+
+.loading::after {
+    content: '';
+    width: 40px;
+    height: 40px;
+    border: 3px solid rgba(255, 255, 255, 0.1);
+    border-top-color: #00ff88;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+    header h1 {
+        font-size: 1.5rem;
+    }
+
+    .controls {
+        flex-direction: column;
+    }
+
+    .game-container canvas {
+        width: 100% !important;
+        height: auto !important;
+    }
+}
+
+/* 进化历史图表容器 */
+.chart-container {
+    padding: 20px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    margin-top: 20px;
+}
+
+.chart-container h3 {
+    margin-bottom: 15px;
+    color: #00ff88;
+}
+
+.chart-container canvas {
+    width: 100% !important;
+    height: 200px !important;
+}
+
+/* 状态指示器 */
+.status-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 15px;
+    border-radius: 20px;
+    font-size: 0.9rem;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.status-indicator.running {
+    background: rgba(0, 255, 136, 0.2);
+    color: #00ff88;
+}
+
+.status-indicator.paused {
+    background: rgba(255, 193, 7, 0.2);
+    color: #ffc107;
+}
+
+.status-indicator .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* ========== 新增组件样式 ========== */
+
+/* 配置面板 */
+.config-panel {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    padding: 15px 20px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    align-items: center;
+    justify-content: center;
+}
+
+.config-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.config-item label {
+    font-size: 0.9rem;
+    color: #888;
+}
+
+.config-item input[type="range"] {
+    width: 100px;
+    accent-color: #00ff88;
+}
+
+.config-item input[type="number"] {
+    width: 80px;
+    padding: 5px 10px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 5px;
+    color: #e0e0e0;
+    font-size: 0.9rem;
+}
+
+.config-item input[type="number"]:focus {
+    outline: none;
+    border-color: #00ff88;
+}
+
+/* 进度面板 */
+.progress-panel {
+    padding: 20px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+}
+
+.progress-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    font-size: 0.9rem;
+    color: #888;
+}
+
+.progress-header #progressText {
+    color: #00ff88;
+    font-weight: bold;
+}
+
+.progress-bar-container {
+    width: 100%;
+    height: 20px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #00ff88, #00cc6a);
+    border-radius: 10px;
+    transition: width 0.3s ease;
+}
+
+.progress-details {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 10px;
+    font-size: 0.85rem;
+    color: #aaa;
+}
+
+.progress-details strong {
+    color: #00ff88;
+}
+
+/* 性能指标面板 */
+.performance-panel {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 15px;
+    padding: 15px 20px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+}
+
+.perf-item {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    text-align: center;
+}
+
+.perf-item .label {
+    font-size: 0.8rem;
+    color: #888;
+}
+
+.perf-item .value {
+    font-size: 1.1rem;
+    font-weight: bold;
+    color: #00ccff;
+}
+
+/* Worker 状态面板 */
+.worker-panel {
+    padding: 15px 20px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+}
+
+.worker-status-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 15px;
+    font-size: 0.95rem;
+    color: #00ff88;
+}
+
+.worker-count {
+    color: #888;
+    font-size: 0.85rem;
+}
+
+.worker-status-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 10px;
+}
+
+.worker-item {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 10px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: all 0.3s ease;
+}
+
+.worker-item.worker-busy {
+    border-color: rgba(0, 255, 136, 0.3);
+    background: rgba(0, 255, 136, 0.05);
+}
+
+.worker-item.worker-idle {
+    opacity: 0.6;
+}
+
+.worker-bar {
+    width: 100%;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.worker-progress {
+    height: 100%;
+    background: linear-gradient(90deg, #00ff88, #00cc6a);
+    border-radius: 3px;
+    transition: width 0.2s ease;
+}
+
+.worker-info {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8rem;
+}
+
+.worker-label {
+    color: #00ff88;
+    font-weight: bold;
+}
+
+.worker-status-text {
+    color: #888;
+}
+
+.worker-item.worker-busy .worker-status-text {
+    color: #00ff88;
+}
+
+/* 日志面板 */
+.log-panel-container {
+    padding: 15px 20px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    max-height: 300px;
+    display: flex;
+    flex-direction: column;
+}
+
+.log-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    color: #00ff88;
+    font-size: 0.95rem;
+}
+
+.log-header .clear-btn {
+    padding: 3px 10px;
+    font-size: 0.75rem;
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    border-radius: 4px;
+    color: #888;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.log-header .clear-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: #e0e0e0;
+}
+
+.log-content {
+    flex: 1;
+    overflow-y: auto;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 0.85rem;
+    line-height: 1.6;
+}
+
+.log-entry {
+    padding: 3px 0;
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+}
+
+.log-time {
+    color: #666;
+    flex-shrink: 0;
+}
+
+.log-icon {
+    width: 16px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.log-message {
+    color: #aaa;
+    word-break: break-word;
+}
+
+.log-entry.log-success .log-message {
+    color: #00ff88;
+}
+
+.log-entry.log-warning .log-message {
+    color: #ffc107;
+}
+
+.log-entry.log-error .log-message {
+    color: #ff6b6b;
+}
+
+.log-entry.log-milestone .log-message {
+    color: #ffd700;
+    font-weight: bold;
+}
+
+.log-entry.log-milestone .log-icon {
+    color: #ffd700;
+}
+
+/* 状态指示器扩展 */
+.status-indicator.completed {
+    background: rgba(0, 204, 255, 0.2);
+    color: #00ccff;
+}
+
+.status-indicator.completed .dot {
+    animation: none;
+}
+
+/* 演示模态框 */
+.demo-modal-content {
+    max-width: 500px;
+}
+
+.demo-modal-content h3 {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+#demoScore {
+    font-size: 0.9rem;
+    color: #ff6b6b;
+}
+
+#demoCanvas {
+    width: 100%;
+    max-width: 400px;
+    height: auto;
+    aspect-ratio: 1;
+    background: #0a0a1a;
+    border-radius: 10px;
+    margin: 10px 0;
+}
+
+.demo-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    justify-content: center;
+    margin-top: 15px;
+}
+
+.demo-controls button {
+    padding: 8px 20px;
+    font-size: 0.9rem;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-weight: bold;
+}
+
+.demo-controls button.primary {
+    background: linear-gradient(135deg, #00ff88, #00cc6a);
+    color: #1a1a2e;
+}
+
+.demo-controls button.secondary {
+    background: rgba(255, 255, 255, 0.1);
+    color: #e0e0e0;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.demo-controls button:hover {
+    transform: translateY(-1px);
+}
+
+.demo-controls label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85rem;
+    color: #888;
+}
+
+.demo-controls input[type="range"] {
+    width: 80px;
+    accent-color: #00ff88;
+}
+
+.demo-controls .close-btn {
+    margin-top: 0;
+    width: auto;
+}

@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 贪吃蛇 - 训练模式</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Courier New', monospace;
+            background: #0a0a0f;
+            color: #00ff88;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        h1 { font-size: 1.5rem; margin-bottom: 20px; }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 1rem;
+            font-family: inherit;
+            border: 1px solid #00ff88;
+            background: transparent;
+            color: #00ff88;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        button:hover { background: #00ff88; color: #0a0a0f; }
+        button.running { background: #00ff88; color: #0a0a0f; }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .stat-box {
+            background: rgba(0, 255, 136, 0.05);
+            border: 1px solid rgba(0, 255, 136, 0.2);
+            padding: 15px;
+        }
+        .stat-label { font-size: 0.8rem; color: #666; margin-bottom: 5px; }
+        .stat-value { font-size: 1.5rem; }
+        .stat-value.highlight { color: #ff6b6b; }
+        .progress-bar {
+            width: 100%;
+            height: 10px;
+            background: #1a1a2e;
+            margin-top: 10px;
+        }
+        .progress-fill {
+            height: 100%;
+            background: #00ff88;
+            transition: width 0.1s;
+        }
+        .log {
+            background: #0f0f1a;
+            padding: 15px;
+            height: 200px;
+            overflow-y: auto;
+            font-size: 0.85rem;
+            border: 1px solid rgba(0, 255, 136, 0.1);
+        }
+        .log-entry { margin-bottom: 3px; }
+        .log-entry.gen { color: #00ff88; }
+        .log-entry.best { color: #ff6b6b; }
+        .speed-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        input[type="range"] { accent-color: #00ff88; width: 150px; }
+        .auto-save { font-size: 0.8rem; color: #666; margin-top: 5px; }
+    </style>
+</head>
+<body>
+    <h1>AI 贪吃蛇训练模式</h1>
+
+    <div class="controls">
+        <button id="startBtn">开始训练</button>
+        <button id="stopBtn">停止</button>
+        <button id="saveBtn">保存模型</button>
+        <button id="loadBestBtn">加载最佳模型</button>
+        <div class="speed-control">
+            <label>速度:</label>
+            <input type="range" id="speedSlider" min="1" max="1000" value="500">
+            <span id="speedValue">500x</span>
+        </div>
+    </div>
+
+    <div class="stats">
+        <div class="stat-box">
+            <div class="stat-label">当前代数</div>
+            <div class="stat-value" id="generation">0</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-label">最高分数</div>
+            <div class="stat-value highlight" id="maxScore">0</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-label">平均分数</div>
+            <div class="stat-value" id="avgScore">0</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-label">最佳适应度</div>
+            <div class="stat-value" id="bestFitness">0</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-label">总评估次数</div>
+            <div class="stat-value" id="totalEval">0</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-label">训练时间</div>
+            <div class="stat-value" id="trainTime">00:00</div>
+        </div>
+    </div>
+
+    <div class="progress-bar">
+        <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+    </div>
+
+    <div class="auto-save">每 50 代自动保存到服务器</div>
+
+    <div class="log" id="log">
+        <div class="log-entry">准备就绪，点击"开始训练"...</div>
+    </div>
+
+    <script type="module">
+        import { Snake } from './js/game/snake.js';
+        import { NeuralNetwork } from './js/ai/neural-network.js';
+        import { Agent } from './js/ai/agent.js';
+        import { GeneticAlgorithm } from './js/ai/genetic-algorithm.js';
+        import { FitnessCalculator } from './js/evolution/fitness.js';
+
+        class FastTrainer {
+            constructor() {
+                this.gridSize = 40;
+                this.populationSize = 100;
+                this.running = false;
+                this.speed = 500; // 每批评估的代数
+                this.generation = 0;
+                this.bestFitness = 0;
+                this.bestScore = 0;
+                this.bestNetwork = null;
+                this.totalEvaluated = 0;
+                this.startTime = null;
+                this.history = [];
+
+                this.agents = [];
+                this.ga = new GeneticAlgorithm({
+                    mutationRate: 0.1,
+                    mutationStrength: 0.5,
+                    eliteCount: 5
+                });
+                this.fitnessCalc = new FitnessCalculator();
+                this.idCounter = 0;
+
+                this.init();
+            }
+
+            init() {
+                // 初始化种群
+                for (let i = 0; i < this.populationSize; i++) {
+                    this.agents.push(Agent.createRandom(this.idCounter++, 28, 16, 4));
+                }
+                this.generation = 1;
+
+                // 绑定事件
+                document.getElementById('startBtn').onclick = () => this.start();
+                document.getElementById('stopBtn').onclick = () => this.stop();
+                document.getElementById('saveBtn').onclick = () => this.saveModel();
+                document.getElementById('loadBestBtn').onclick = () => this.loadBestModel();
+
+                document.getElementById('speedSlider').oninput = (e) => {
+                    this.speed = parseInt(e.target.value);
+                    document.getElementById('speedValue').textContent = this.speed + 'x';
+                };
+            }
+
+            log(msg, type = '') {
+                const logEl = document.getElementById('log');
+                const entry = document.createElement('div');
+                entry.className = 'log-entry ' + type;
+                entry.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+                logEl.appendChild(entry);
+                logEl.scrollTop = logEl.scrollHeight;
+
+                // 限制日志行数
+                while (logEl.children.length > 100) {
+                    logEl.removeChild(logEl.firstChild);
+                }
+            }
+
+            start() {
+                if (this.running) return;
+                this.running = true;
+                this.startTime = this.startTime || Date.now();
+                document.getElementById('startBtn').classList.add('running');
+                document.getElementById('startBtn').textContent = '训练中...';
+                this.log('开始训练');
+                this.trainLoop();
+            }
+
+            stop() {
+                this.running = false;
+                document.getElementById('startBtn').classList.remove('running');
+                document.getElementById('startBtn').textContent = '继续训练';
+                this.log('已暂停');
+            }
+
+            async trainLoop() {
+                if (!this.running) return;
+
+                // 批量评估多代
+                for (let i = 0; i < this.speed && this.running; i++) {
+                    await this.evaluateGeneration();
+                    this.evolve();
+                }
+
+                // 更新UI
+                this.updateStats();
+
+                // 自动保存
+                if (this.generation % 50 === 0) {
+                    await this.autoSave();
+                }
+
+                // 继续循环
+                if (this.running) {
+                    requestAnimationFrame(() => this.trainLoop());
+                }
+            }
+
+            async evaluateGeneration() {
+                // 并行评估所有代理
+                for (const agent of this.agents) {
+                    const result = this.runGame(agent);
+                    agent.score = result.score;
+                    agent.steps = result.steps;
+                    agent.fitness = this.fitnessCalc.calculate(result);
+                    this.totalEvaluated++;
+                }
+            }
+
+            runGame(agent) {
+                // 初始化蛇
+                const centerX = Math.floor(this.gridSize / 2);
+                const centerY = Math.floor(this.gridSize / 2);
+                const body = [
+                    { x: centerX, y: centerY },
+                    { x: centerX - 1, y: centerY },
+                    { x: centerX - 2, y: centerY }
+                ];
+                let direction = { x: 1, y: 0 };
+                let score = 0;
+                let steps = 0;
+                let stepsWithoutFood = 0;
+                const maxSteps = this.gridSize * this.gridSize * 2;
+
+                // 生成食物
+                let food = this.spawnFood(body);
+
+                while (steps < maxSteps) {
+                    // 构建输入
+                    const input = this.buildInput(body, food, direction);
+
+                    // AI决策
+                    const output = agent.network.forward(input);
+                    const actions = ['up', 'down', 'left', 'right'];
+                    let actionIndex = 0;
+                    let maxVal = -Infinity;
+                    for (let i = 0; i < output.length; i++) {
+                        if (output[i] > maxVal) {
+                            maxVal = output[i];
+                            actionIndex = i;
+                        }
+                    }
+                    const action = actions[actionIndex];
+
+                    // 更新方向
+                    const dirs = {
+                        'up': { x: 0, y: -1 },
+                        'down': { x: 0, y: 1 },
+                        'left': { x: -1, y: 0 },
+                        'right': { x: 1, y: 0 }
+                    };
+                    const newDir = dirs[action];
+                    if (newDir && (direction.x + newDir.x !== 0 || direction.y + newDir.y !== 0)) {
+                        direction = newDir;
+                    }
+
+                    // 移动
+                    const head = body[0];
+                    const newHead = { x: head.x + direction.x, y: head.y + direction.y };
+                    steps++;
+                    stepsWithoutFood++;
+
+                    // 检查死亡
+                    if (newHead.x < 0 || newHead.x >= this.gridSize ||
+                        newHead.y < 0 || newHead.y >= this.gridSize) {
+                        break;
+                    }
+
+                    let hitBody = false;
+                    for (let i = 0; i < body.length - 1; i++) {
+                        if (body[i].x === newHead.x && body[i].y === newHead.y) {
+                            hitBody = true;
+                            break;
+                        }
+                    }
+                    if (hitBody) break;
+
+                    // 太久没吃到食物
+                    if (stepsWithoutFood > this.gridSize * this.gridSize) break;
+
+                    body.unshift(newHead);
+
+                    // 检查是否吃到食物
+                    if (newHead.x === food.x && newHead.y === food.y) {
+                        score++;
+                        stepsWithoutFood = 0;
+                        food = this.spawnFood(body);
+                    } else {
+                        body.pop();
+                    }
+                }
+
+                return { score, steps, died: true };
+            }
+
+            spawnFood(body) {
+                let pos;
+                let attempts = 0;
+                do {
+                    pos = {
+                        x: Math.floor(Math.random() * this.gridSize),
+                        y: Math.floor(Math.random() * this.gridSize)
+                    };
+                    attempts++;
+                } while (body.some(s => s.x === pos.x && s.y === pos.y) && attempts < 100);
+                return pos;
+            }
+
+            buildInput(body, food, direction) {
+                const head = body[0];
+                const input = [];
+
+                // 当前方向 (4维)
+                input.push(direction.y === -1 ? 1 : 0); // up
+                input.push(direction.y === 1 ? 1 : 0);  // down
+                input.push(direction.x === -1 ? 1 : 0); // left
+                input.push(direction.x === 1 ? 1 : 0);  // right
+
+                // 食物方向 (8维)
+                input.push(head.y > food.y ? 1 : 0);
+                input.push(head.y < food.y ? 1 : 0);
+                input.push(head.x > food.x ? 1 : 0);
+                input.push(head.x < food.x ? 1 : 0);
+                input.push((head.y > food.y && head.x < food.x) ? 1 : 0);
+                input.push((head.y > food.y && head.x > food.x) ? 1 : 0);
+                input.push((head.y < food.y && head.x > food.x) ? 1 : 0);
+                input.push((head.y < food.y && head.x < food.x) ? 1 : 0);
+
+                // 8方向障碍物距离
+                const directions = [
+                    { x: 0, y: -1 }, { x: 0, y: 1 }, { x: -1, y: 0 }, { x: 1, y: 0 },
+                    { x: 1, y: -1 }, { x: -1, y: -1 }, { x: -1, y: 1 }, { x: 1, y: 1 }
+                ];
+
+                for (const dir of directions) {
+                    let dist = 0;
+                    let pos = { x: head.x + dir.x, y: head.y + dir.y };
+                    while (dist < this.gridSize) {
+                        if (pos.x < 0 || pos.x >= this.gridSize ||
+                            pos.y < 0 || pos.y >= this.gridSize) break;
+                        if (body.some(s => s.x === pos.x && s.y === pos.y)) break;
+                        dist++;
+                        pos.x += dir.x;
+                        pos.y += dir.y;
+                    }
+                    input.push(dist / this.gridSize);
+                }
+
+                // 8方向身体距离
+                for (const dir of directions) {
+                    let dist = 0;
+                    let pos = { x: head.x + dir.x, y: head.y + dir.y };
+                    while (dist < this.gridSize) {
+                        if (pos.x < 0 || pos.x >= this.gridSize ||
+                            pos.y < 0 || pos.y >= this.gridSize) {
+                            dist = this.gridSize;
+                            break;
+                        }
+                        const bodyIdx = body.findIndex(s => s.x === pos.x && s.y === pos.y);
+                        if (bodyIdx > 0) break;
+                        dist++;
+                        pos.x += dir.x;
+                        pos.y += dir.y;
+                    }
+                    input.push(dist / this.gridSize);
+                }
+
+                return input;
+            }
+
+            evolve() {
+                // 排序
+                this.agents.sort((a, b) => b.fitness - a.fitness);
+
+                // 更新最佳
+                if (this.agents[0].fitness > this.bestFitness) {
+                    this.bestFitness = this.agents[0].fitness;
+                    this.bestScore = this.agents[0].score;
+                    this.bestNetwork = this.agents[0].network.clone();
+
+                    this.log(`新纪录! 分数: ${this.bestScore}, 适应度: ${this.bestFitness.toFixed(0)}`, 'best');
+                }
+
+                // 记录历史
+                const avgScore = this.agents.reduce((s, a) => s + a.score, 0) / this.agents.length;
+                const avgFitness = this.agents.reduce((s, a) => s + a.fitness, 0) / this.agents.length;
+                this.history.push({
+                    generation: this.generation,
+                    maxScore: this.agents[0].score,
+                    avgScore,
+                    maxFitness: this.agents[0].fitness,
+                    avgFitness
+                });
+
+                // 进化
+                this.agents = this.ga.evolve(this.agents, (weights) => {
+                    return Agent.fromWeights(this.idCounter++, weights, [28, 16, 4]);
+                });
+
+                this.generation++;
+
+                if (this.generation % 10 === 0) {
+                    this.log(`第 ${this.generation} 代完成`, 'gen');
+                }
+            }
+
+            updateStats() {
+                const avgScore = this.history.length > 0
+                    ? this.history[this.history.length - 1].avgScore
+                    : 0;
+
+                document.getElementById('generation').textContent = this.generation;
+                document.getElementById('maxScore').textContent = this.bestScore;
+                document.getElementById('avgScore').textContent = avgScore.toFixed(1);
+                document.getElementById('bestFitness').textContent = this.bestFitness.toFixed(0);
+                document.getElementById('totalEval').textContent = this.totalEvaluated;
+
+                // 训练时间
+                if (this.startTime) {
+                    const elapsed = Math.floor((Date.now() - this.startTime) / 1000);
+                    const mins = Math.floor(elapsed / 60);
+                    const secs = elapsed % 60;
+                    document.getElementById('trainTime').textContent =
+                        `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                }
+
+                // 进度条
+                const progress = (this.generation % 100) / 100 * 100;
+                document.getElementById('progressFill').style.width = progress + '%';
+            }
+
+            async autoSave() {
+                try {
+                    await fetch('/api/leaderboard', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            generation: this.generation,
+                            score: this.bestScore,
+                            fitness: this.bestFitness
+                        })
+                    });
+                    this.log('自动保存到排行榜');
+                } catch (e) {
+                    // 忽略错误
+                }
+            }
+
+            async saveModel() {
+                if (!this.bestNetwork) {
+                    this.log('没有可保存的模型');
+                    return;
+                }
+
+                try {
+                    const response = await fetch('/api/models', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            generation: this.generation,
+                            score: this.bestScore,
+                            fitness: this.bestFitness,
+                            network: this.bestNetwork.toJSON(),
+                            history: this.history
+                        })
+                    });
+                    const result = await response.json();
+                    if (result.success) {
+                        this.log(`模型已保存 (ID: ${result.id})`);
+                    }
+                } catch (e) {
+                    this.log('保存失败: ' + e.message);
+                }
+            }
+
+            async loadBestModel() {
+                try {
+                    const response = await fetch('/api/models/best');
+                    const result = await response.json();
+                    if (result.success && result.model) {
+                        this.bestNetwork = NeuralNetwork.fromJSON(result.model.network);
+                        this.bestFitness = result.model.fitness;
+                        this.bestScore = result.model.score;
+                        this.generation = result.model.generation;
+                        this.history = result.model.history || [];
+
+                        // 用最佳模型初始化部分种群
+                        const bestWeights = this.bestNetwork.getWeights();
+                        for (let i = 0; i < 10; i++) {
+                            const mutatedWeights = bestWeights.map(w =>
+                                w + (Math.random() - 0.5) * 0.1
+                            );
+                            this.agents[i].network.setWeights(mutatedWeights);
+                        }
+
+                        this.updateStats();
+                        this.log(`已加载模型: Gen-${result.model.generation}, 分数: ${result.model.score}`);
+                    } else {
+                        this.log('没有已保存的模型');
+                    }
+                } catch (e) {
+                    this.log('加载失败: ' + e.message);
+                }
+            }
+        }
+
+        new FastTrainer();
+    </script>
+</body>
+</html>

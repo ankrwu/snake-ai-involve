@@ -1,0 +1,26 @@
+{
+  "name": "snake-evolution",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "AI自动进化的贪吃蛇游戏 - 使用神经进化算法",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node server/index.js"
+  },
+  "keywords": [
+    "snake",
+    "ai",
+    "neuroevolution",
+    "genetic-algorithm",
+    "game"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "better-sqlite3": "^9.4.3",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "ws": "^8.19.0"
+  }
+}

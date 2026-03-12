@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 贪吃蛇进化模拟器 - 多线程版</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header>
+        <h1>AI 贪吃蛇进化模拟器</h1>
+        <p style="margin-top: 10px; color: #888;">多线程神经进化训练 - 充分利用 CPU 性能</p>
+    </header>
+
+    <main>
+        <!-- 控制面板 -->
+        <div class="controls">
+            <button id="startBtn" class="primary">开始训练</button>
+            <button id="pauseBtn" class="secondary" disabled>暂停</button>
+            <button id="resetBtn" class="secondary">重置</button>
+
+            <button id="saveBtn" class="secondary">保存模型</button>
+            <button id="loadBtn" class="secondary">加载模型</button>
+            <button id="demoBtn" class="secondary" disabled>观看演示</button>
+
+            <div class="status-indicator" id="statusIndicator">
+                <span class="dot"></span>
+                <span id="statusText">就绪</span>
+            </div>
+        </div>
+
+        <!-- 训练配置 -->
+        <div class="config-panel">
+            <div class="config-item">
+                <label>Worker 数量:</label>
+                <input type="range" id="workerSlider" min="1" max="16" value="4">
+                <span id="workerCountDisplay">4</span>
+            </div>
+            <div class="config-item">
+                <label>目标代数:</label>
+                <input type="number" id="targetGenInput" value="1000" min="1" max="100000">
+            </div>
+            <div class="config-item">
+                <label>种群大小:</label>
+                <span id="populationSize">100</span>
+            </div>
+        </div>
+
+        <!-- 训练进度 -->
+        <div class="progress-panel">
+            <div class="progress-header">
+                <span>训练进度</span>
+                <span id="progressText">0%</span>
+            </div>
+            <div class="progress-bar-container">
+                <div class="progress-bar" id="progressBar" style="width: 0%"></div>
+            </div>
+            <div class="progress-details">
+                <span>当前代数: <strong id="generation">0</strong> / <span id="targetGeneration">1000</span></span>
+                <span>本代进度: <strong id="generationProgress">0/100</strong></span>
+            </div>
+        </div>
+
+        <!-- 统计面板 -->
+        <div class="stats-panel">
+            <div class="stat-item">
+                <span class="label">平均分数</span>
+                <span class="value" id="avgScore">0</span>
+            </div>
+            <div class="stat-item">
+                <span class="label">最高分数</span>
+                <span class="value highlight" id="maxScore">0</span>
+            </div>
+            <div class="stat-item">
+                <span class="label">平均适应度</span>
+                <span class="value" id="avgFitness">0</span>
+            </div>
+            <div class="stat-item">
+                <span class="label">最佳适应度</span>
+                <span class="value" id="bestFitness">0</span>
+            </div>
+            <div class="stat-item">
+                <span class="label">已评估个体</span>
+                <span class="value" id="evaluated">0</span>
+            </div>
+            <div class="stat-item">
+                <span class="label">Worker 数量</span>
+                <span class="value" id="workerCount">4</span>
+            </div>
+        </div>
+
+        <!-- 性能指标 -->
+        <div class="performance-panel">
+            <div class="perf-item">
+                <span class="label">训练速度</span>
+                <span class="value" id="trainingSpeed">0 games/s</span>
+            </div>
+            <div class="perf-item">
+                <span class="label">已运行时间</span>
+                <span class="value" id="elapsedTime">0s</span>
+            </div>
+            <div class="perf-item">
+                <span class="label">预计剩余时间</span>
+                <span class="value" id="remainingTime">--</span>
+            </div>
+            <div class="perf-item">
+                <span class="label">总游戏局数</span>
+                <span class="value" id="totalGames">0</span>
+            </div>
+        </div>
+
+        <!-- Worker 状态面板 -->
+        <div class="worker-panel" id="workerStatusPanel">
+            <!-- 由 JS 动态生成 -->
+        </div>
+
+        <!-- 日志面板 -->
+        <div class="log-panel-container" id="logPanel">
+            <!-- 由 JS 动态生成 -->
+        </div>
+
+        <!-- 进化历史图表 -->
+        <div class="chart-container">
+            <h3>进化历史</h3>
+            <canvas id="historyChart"></canvas>
+        </div>
+
+        <!-- 排行榜 -->
+        <div class="leaderboard">
+            <h3>排行榜</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>排名</th>
+                        <th>代数</th>
+                        <th>分数</th>
+                        <th>日期</th>
+                    </tr>
+                </thead>
+                <tbody id="leaderboardBody">
+                    <tr>
+                        <td colspan="4" style="text-align: center; color: #888;">暂无记录</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </main>
+
+    <!-- 加载模型模态框 -->
+    <div class="modal" id="loadModal">
+        <div class="modal-content">
+            <h3>选择要加载的模型</h3>
+            <div class="model-list" id="modelList">
+                <div class="loading"></div>
+            </div>
+            <button class="secondary close-btn" id="closeModalBtn">关闭</button>
+        </div>
+    </div>
+
+    <!-- 演示模态框 -->
+    <div class="modal" id="demoModal">
+        <div class="modal-content demo-modal-content">
+            <h3>最佳 Agent 演示 <span id="demoScore"></span></h3>
+            <canvas id="demoCanvas" width="400" height="400"></canvas>
+            <div class="demo-controls">
+                <button id="demoPlayPauseBtn" class="primary">暂停</button>
+                <button id="demoRestartBtn" class="secondary">重新播放</button>
+                <label>
+                    速度:
+                    <input type="range" id="demoSpeedSlider" min="1" max="20" value="10">
+                </label>
+                <button class="secondary close-btn" id="closeDemoBtn">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>
