@@ -4,7 +4,7 @@
 import { cpus } from 'os';
 import { WorkerPool } from './worker-pool.js';
 import { Population } from './population.js';
-import { saveModel, getModel, addLeaderboardEntry } from '../database/db.js';
+import { saveModel, getModel, getBestModel, addLeaderboardEntry } from '../database/db.js';
 
 export class TrainingEngine {
     constructor() {
@@ -28,6 +28,7 @@ export class TrainingEngine {
         this.totalGames = 0;
         this.generationBestScore = 0;
         this.generationBestAgentId = null;
+        this.generationBestSeed = null;
 
         // 回调
         this.onStatusUpdate = null;
@@ -36,9 +37,11 @@ export class TrainingEngine {
         this.onGenerationComplete = null;
         this.onWorkerStatusChange = null;
         
-        // 最佳演示数据（保存历史最高分的游戏记录）
-        this.bestDemoData = null;
-        this.bestDemoRecordedScore = 0;  // 记录已保存演示时的 population.bestScore
+        // 历史最高分演示数据（种子和权重，用于重现）
+        this.bestDemoRecordedScore = 0;
+        this.bestDemoSeed = null;
+        this.bestDemoAgentWeights = null;
+        this.loadedModelId = null;  // 当前加载的模型 ID
     }
 
     /**
@@ -154,6 +157,9 @@ export class TrainingEngine {
         this.startTime = Date.now();
         this.totalGames = 0;
 
+        // 清除加载的模型标记，开始新训练
+        this.loadedModelId = null;
+
         this.log('info', `开始训练 - 目标: ${this.config.targetGeneration} 代`);
         this.updateStatus();
 
@@ -169,10 +175,8 @@ export class TrainingEngine {
             this.evaluatedCount = 0;
             this.generationBestScore = 0;
             this.generationBestAgentId = null;
-            this.generationBestFrames = null;
-            this.generationBestFinalScore = 0;
-            this.generationBestSteps = 0;
-            this.generationBestDeathCause = null;
+            this.generationBestSeed = null;
+            this.generationBestWeights = null;
 
             this.log('info', `Gen-${this.population.generation} 开始评估`);
             this.updateStatus();
@@ -194,7 +198,7 @@ export class TrainingEngine {
                 this.updateProgress();
             });
 
-            // 处理结果
+            // 处理结果，记录本代最佳和种子
             for (let i = 0; i < results.length; i++) {
                 const result = results[i];
                 const agent = this.population.agents[i];
@@ -202,22 +206,16 @@ export class TrainingEngine {
                 agent.score = result.score;
                 agent.steps = result.steps;
                 agent.fitness = result.fitness;
-                
-                // 保存帧数据用于演示
-                if (result.frames) {
-                    agent.frames = result.frames;
-                }
+                agent.seed = result.seed;  // 保存种子
 
                 this.totalGames++;
 
                 if (result.score > this.generationBestScore) {
                     this.generationBestScore = result.score;
                     this.generationBestAgentId = agent.id;
-                    // 保存本代最佳的游戏帧
-                    this.generationBestFrames = result.frames;
-                    this.generationBestFinalScore = result.score;
-                    this.generationBestSteps = result.steps;
-                    this.generationBestDeathCause = result.cause;
+                    this.generationBestSeed = result.seed;
+                    // 同时保存该 Agent 的权重（用于演示重现）
+                    this.generationBestWeights = agent.network.getWeights();
                 }
             }
 
@@ -229,20 +227,14 @@ export class TrainingEngine {
             // 进化
             const evolveResult = this.population.evolve();
 
-            // 检查是否有新的历史最高分，保存该次游戏的演示数据
+            // 检查是否有新的历史最高分，保存种子和权重用于重现
             if (this.population.bestScore > this.bestDemoRecordedScore) {
-                // 使用训练时实际的游戏帧数据
-                if (this.generationBestFrames && this.generationBestFinalScore === this.population.bestScore) {
-                    this.bestDemoData = {
-                        frames: this.generationBestFrames,
-                        finalScore: this.generationBestFinalScore,
-                        totalSteps: this.generationBestSteps,
-                        deathCause: this.generationBestDeathCause,
-                        gridSize: this.config.gridSize,
-                        generation: this.population.generation
-                    };
+                // 使用取得该分数的 Agent 的种子和权重
+                if (this.generationBestSeed && this.generationBestWeights) {
                     this.bestDemoRecordedScore = this.population.bestScore;
-                    this.log('milestone', `新历史最高分: ${this.population.bestScore}，已保存真实游戏记录`);
+                    this.bestDemoSeed = this.generationBestSeed;
+                    this.bestDemoAgentWeights = this.generationBestWeights;
+                    this.log('milestone', `新历史最高分: ${this.population.bestScore}，已保存种子用于重现`);
                 }
             }
 
@@ -324,10 +316,13 @@ export class TrainingEngine {
         this.evaluatedCount = 0;
         this.generationBestScore = 0;
         this.generationBestAgentId = null;
-        
+        this.generationBestSeed = null;
+
         // 重置演示数据
-        this.bestDemoData = null;
         this.bestDemoRecordedScore = 0;
+        this.bestDemoSeed = null;
+        this.bestDemoAgentWeights = null;
+        this.loadedModelId = null;
 
         if (this.workerPool) {
             this.workerPool.terminate();
@@ -363,11 +358,22 @@ export class TrainingEngine {
 
             // 加载模型
             this.population.loadModel(model);
-            
-            // 重置演示数据，下次请求时会重新生成
-            this.bestDemoData = null;
-            this.bestDemoRecordedScore = 0;
-            
+
+            // 加载模型的种子和权重，用于演示
+            if (model.seed) {
+                this.bestDemoSeed = model.seed;
+                this.bestDemoRecordedScore = model.score;
+                // 从网络数据提取权重
+                this.bestDemoAgentWeights = this.extractWeightsFromNetwork(model.network);
+                this.loadedModelId = modelId;  // 标记已加载模型
+            } else {
+                // 旧模型没有种子，重置演示数据
+                this.bestDemoSeed = null;
+                this.bestDemoRecordedScore = model.score;
+                this.bestDemoAgentWeights = this.extractWeightsFromNetwork(model.network);
+                this.loadedModelId = modelId;
+            }
+
             this.log('success', `成功加载模型: ${model.name} (Gen-${model.generation}, 分数: ${model.score})`);
             this.updateStatus();
             return true;
@@ -393,7 +399,8 @@ export class TrainingEngine {
             score: modelData.score,
             fitness: modelData.fitness,
             network: modelData.network,
-            history: modelData.history
+            history: modelData.history,
+            seed: this.bestDemoSeed  // 保存种子
         });
 
         this.log('success', `模型已保存，ID: ${id}`);
@@ -460,16 +467,287 @@ export class TrainingEngine {
 
     /**
      * 获取最佳 Agent 的演示数据
-     * 返回保存的历史最高分演示数据（真实游戏记录）
+     * 优先级：加载的模型 > 当前训练最佳 > 数据库历史最佳
      */
     getDemoData() {
-        // 如果有保存的真实游戏记录，直接返回
-        if (this.bestDemoData) {
-            return this.bestDemoData;
+        // 1. 如果加载了历史模型，使用该模型的种子和权重
+        if (this.loadedModelId !== null && this.bestDemoAgentWeights) {
+            if (this.bestDemoSeed) {
+                this.log('info', `重现加载模型的训练最佳成绩 (种子: ${this.bestDemoSeed})`);
+                return this.replayGameWithSeed(this.bestDemoAgentWeights, this.bestDemoSeed);
+            } else {
+                // 旧模型没有种子，运行新的演示游戏
+                this.log('info', `加载的模型无种子，运行新演示游戏`);
+                return this.runDemoGameWithWeights(this.bestDemoAgentWeights, 5);
+            }
         }
-        
-        // 否则运行演示游戏
+
+        // 2. 如果当前训练有保存的种子和权重，使用当前训练的
+        if (this.bestDemoSeed && this.bestDemoAgentWeights) {
+            return this.replayGameWithSeed(this.bestDemoAgentWeights, this.bestDemoSeed);
+        }
+
+        // 3. 从数据库获取历史最佳模型
+        const bestModel = getBestModel();
+        if (bestModel && bestModel.seed) {
+            const weights = this.extractWeightsFromNetwork(bestModel.network);
+            if (weights) {
+                return this.replayGameWithSeed(weights, bestModel.seed);
+            }
+        }
+
+        // 4. 如果有历史最佳模型但没有种子，运行新的演示游戏
+        if (bestModel) {
+            const weights = this.extractWeightsFromNetwork(bestModel.network);
+            if (weights) {
+                return this.runDemoGameWithWeights(weights, 5);
+            }
+        }
+
+        // 5. 使用当前训练的最佳 Agent
         return this.runBestDemoGame(5);
+    }
+
+    /**
+     * 从网络 JSON 提取权重数组
+     */
+    extractWeightsFromNetwork(networkData) {
+        if (!networkData || !networkData.weights) return null;
+
+        const weights = [];
+        const layers = networkData.weights;
+
+        for (let i = 0; i < layers.length; i++) {
+            const layerWeights = layers[i];
+            // 权重
+            for (let j = 0; j < layerWeights.length; j++) {
+                weights.push(...layerWeights[j]);
+            }
+            // 偏置
+            if (networkData.biases && networkData.biases[i]) {
+                weights.push(...networkData.biases[i]);
+            }
+        }
+
+        return weights;
+    }
+
+    /**
+     * 使用权重运行多次演示游戏，返回最佳结果
+     */
+    runDemoGameWithWeights(weights, runs = 5) {
+        let bestResult = null;
+        let bestScore = -1;
+
+        for (let i = 0; i < runs; i++) {
+            const seed = Date.now() + i;
+            const result = this.replayGameWithSeed(weights, seed);
+            if (result && result.finalScore > bestScore) {
+                bestScore = result.finalScore;
+                bestResult = result;
+            }
+        }
+
+        return bestResult;
+    }
+
+    /**
+     * 使用种子重现游戏（完全一致）
+     */
+    replayGameWithSeed(weights, seed) {
+        const gridSize = this.config.gridSize;
+        const maxStepsWithoutFood = gridSize * gridSize;
+
+        // 创建种子随机数生成器
+        const random = this.createSeededRandom(seed);
+
+        // 初始化游戏状态
+        const centerX = Math.floor(gridSize / 2);
+        const centerY = Math.floor(gridSize / 2);
+
+        let snake = {
+            body: [
+                { x: centerX, y: centerY },
+                { x: centerX - 1, y: centerY },
+                { x: centerX - 2, y: centerY }
+            ],
+            direction: { x: 1, y: 0 },
+            nextDirection: { x: 1, y: 0 },
+            alive: true
+        };
+
+        let food = this.spawnFoodWithRandom(snake.body, gridSize, random);
+        let score = 0;
+        let steps = 0;
+        let stepsWithoutFood = 0;
+        let gameOver = false;
+        let deathCause = null;
+
+        const frames = [];
+        frames.push({
+            snake: JSON.parse(JSON.stringify(snake.body)),
+            food: { ...food },
+            score: 0,
+            steps: 0
+        });
+
+        const directions = [
+            { x: 0, y: -1 },  // up
+            { x: 0, y: 1 },   // down
+            { x: -1, y: 0 },  // left
+            { x: 1, y: 0 }    // right
+        ];
+        const actionNames = ['up', 'down', 'left', 'right'];
+
+        while (!gameOver && steps < maxStepsWithoutFood * 2) {
+            const state = this.getGameState(snake, food, gridSize);
+            const output = this.forwardNetwork(weights, state);
+            const actionIndex = output.indexOf(Math.max(...output));
+            const action = actionNames[actionIndex];
+
+            const newDir = directions[actionIndex];
+            if (snake.direction.x + newDir.x !== 0 || snake.direction.y + newDir.y !== 0) {
+                snake.nextDirection = newDir;
+            }
+
+            snake.direction = snake.nextDirection;
+            const head = snake.body[0];
+            const newHead = {
+                x: head.x + snake.direction.x,
+                y: head.y + snake.direction.y
+            };
+
+            steps++;
+            stepsWithoutFood++;
+
+            if (newHead.x < 0 || newHead.x >= gridSize ||
+                newHead.y < 0 || newHead.y >= gridSize) {
+                gameOver = true;
+                deathCause = 'wall';
+                break;
+            }
+
+            let selfCollision = false;
+            for (let i = 0; i < snake.body.length - 1; i++) {
+                if (snake.body[i].x === newHead.x && snake.body[i].y === newHead.y) {
+                    selfCollision = true;
+                    break;
+                }
+            }
+            if (selfCollision) {
+                gameOver = true;
+                deathCause = 'self';
+                break;
+            }
+
+            if (stepsWithoutFood > maxStepsWithoutFood) {
+                gameOver = true;
+                deathCause = 'starvation';
+                break;
+            }
+
+            snake.body.unshift(newHead);
+
+            if (newHead.x === food.x && newHead.y === food.y) {
+                score++;
+                stepsWithoutFood = 0;
+                food = this.spawnFoodWithRandom(snake.body, gridSize, random);
+            } else {
+                snake.body.pop();
+            }
+
+            frames.push({
+                snake: JSON.parse(JSON.stringify(snake.body)),
+                food: { ...food },
+                score,
+                steps
+            });
+        }
+
+        return {
+            frames,
+            finalScore: score,
+            totalSteps: steps,
+            deathCause,
+            gridSize,
+            generation: this.population ? this.population.generation : 0
+        };
+    }
+
+    /**
+     * 种子随机数生成器
+     */
+    createSeededRandom(seed) {
+        let state = seed;
+        return function() {
+            state |= 0;
+            state = state + 0x6D2B79F5 | 0;
+            let t = Math.imul(state ^ state >>> 15, 1 | state);
+            t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+            return ((t ^ t >>> 14) >>> 0) / 4294967296;
+        };
+    }
+
+    /**
+     * 使用指定随机函数生成食物
+     */
+    spawnFoodWithRandom(snakeBody, gridSize, random) {
+        let pos;
+        let attempts = 0;
+        do {
+            pos = {
+                x: Math.floor(random() * gridSize),
+                y: Math.floor(random() * gridSize)
+            };
+            attempts++;
+        } while (snakeBody.some(s => s.x === pos.x && s.y === pos.y) && attempts < 1000);
+        return pos;
+    }
+
+    /**
+     * 使用权重直接前向传播
+     */
+    forwardNetwork(weights, input) {
+        const layers = [28, 16, 4];
+        let index = 0;
+        const layerWeights = [];
+        const layerBiases = [];
+
+        for (let i = 0; i < layers.length - 1; i++) {
+            const lw = [];
+            for (let j = 0; j < layers[i]; j++) {
+                const neuronWeights = [];
+                for (let k = 0; k < layers[i + 1]; k++) {
+                    neuronWeights.push(weights[index++]);
+                }
+                lw.push(neuronWeights);
+            }
+            layerWeights.push(lw);
+
+            const lb = [];
+            for (let k = 0; k < layers[i + 1]; k++) {
+                lb.push(weights[index++]);
+            }
+            layerBiases.push(lb);
+        }
+
+        let activation = input;
+        for (let i = 0; i < layerWeights.length; i++) {
+            const next = [];
+            for (let j = 0; j < layerWeights[i][0].length; j++) {
+                let sum = layerBiases[i][j];
+                for (let k = 0; k < activation.length; k++) {
+                    sum += activation[k] * layerWeights[i][k][j];
+                }
+                if (i < layerWeights.length - 1) {
+                    next.push(Math.tanh(sum));
+                } else {
+                    next.push(1 / (1 + Math.exp(-Math.max(-500, Math.min(500, sum)))));
+                }
+            }
+            activation = next;
+        }
+        return activation;
     }
 
     /**
@@ -484,7 +762,7 @@ export class TrainingEngine {
         let bestScore = -1;
 
         for (let i = 0; i < runs; i++) {
-            const result = this.runDemoGame();
+            const result = this.runDemoGameForAgent(this.population.bestAgent);
             if (result && result.finalScore > bestScore) {
                 bestScore = result.finalScore;
                 bestResult = result;
@@ -495,10 +773,10 @@ export class TrainingEngine {
     }
 
     /**
-     * 运行一次演示游戏并记录所有步骤
+     * 为指定 Agent 运行一次演示游戏并记录所有步骤
      */
-    runDemoGame() {
-        if (!this.population || !this.population.bestAgent) {
+    runDemoGameForAgent(agent) {
+        if (!agent) {
             return null;
         }
 
@@ -552,7 +830,7 @@ export class TrainingEngine {
             const state = this.getGameState(snake, food, gridSize);
             
             // 神经网络决策
-            const output = this.population.bestAgent.forward(state);
+            const output = agent.forward(state);
             const actionIndex = output.indexOf(Math.max(...output));
             const action = actionNames[actionIndex];
 

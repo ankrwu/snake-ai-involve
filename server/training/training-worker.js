@@ -4,6 +4,23 @@
  */
 import { parentPort } from 'worker_threads';
 
+// ==================== 种子随机数生成器 ====================
+
+/**
+ * 简单的种子随机数生成器（Mulberry32）
+ * 使用相同种子会产生完全相同的随机序列
+ */
+function createSeededRandom(seed) {
+    let state = seed;
+    return function() {
+        state |= 0;
+        state = state + 0x6D2B79F5 | 0;
+        let t = Math.imul(state ^ state >>> 15, 1 | state);
+        t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+}
+
 // ==================== 数学工具函数 ====================
 
 function sigmoid(x) {
@@ -196,8 +213,9 @@ class Snake {
 // ==================== 游戏模拟器 ====================
 
 class GameSimulation {
-    constructor(gridSize = 40) {
+    constructor(gridSize = 40, randomFn = Math.random) {
         this.gridSize = gridSize;
+        this.random = randomFn;
         this.snake = null;
         this.food = null;
         this.gameOver = false;
@@ -221,8 +239,8 @@ class GameSimulation {
         let attempts = 0;
         do {
             pos = {
-                x: Math.floor(Math.random() * this.gridSize),
-                y: Math.floor(Math.random() * this.gridSize)
+                x: Math.floor(this.random() * this.gridSize),
+                y: Math.floor(this.random() * this.gridSize)
             };
             attempts++;
         } while (this.snake && this.snake.isBodyAt(pos) && attempts < 1000);
@@ -403,22 +421,14 @@ parentPort.on('message', (data) => {
 
 function evaluateAgent(taskId, agentData, config) {
     const { id, weights } = agentData;
-    const { gridSize = 40, maxStepsWithoutFood = 1600 } = config;
+    const { gridSize = 40, maxStepsWithoutFood = 1600, seed = Date.now() } = config;
+
+    // 使用种子随机，确保可重现
+    const random = createSeededRandom(seed);
 
     const agent = Agent.fromWeights(id, weights, [28, 16, 4]);
-    const game = new GameSimulation(gridSize);
+    const game = new GameSimulation(gridSize, random);
     game.snake.maxStepsWithoutFood = maxStepsWithoutFood;
-
-    // 记录游戏帧（用于高分演示）
-    const frames = [];
-
-    // 记录初始状态
-    frames.push({
-        snake: JSON.parse(JSON.stringify(game.snake.body)),
-        food: { ...game.food },
-        score: 0,
-        steps: 0
-    });
 
     while (!game.gameOver) {
         const state = game.getState();
@@ -426,14 +436,6 @@ function evaluateAgent(taskId, agentData, config) {
 
         const action = agent.getAction(state);
         game.step(action);
-
-        // 记录每一帧
-        frames.push({
-            snake: JSON.parse(JSON.stringify(game.snake.body)),
-            food: { ...game.food },
-            score: game.score,
-            steps: game.steps
-        });
     }
 
     const fitness = calculateFitness(game.score, game.steps, game.deathCause !== null);
@@ -448,7 +450,7 @@ function evaluateAgent(taskId, agentData, config) {
             fitness: fitness,
             died: game.deathCause !== null,
             cause: game.deathCause,
-            frames: frames  // 返回游戏帧数据
+            seed: seed  // 返回种子，用于重现
         }
     });
 }

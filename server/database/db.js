@@ -31,6 +31,7 @@ db.exec(`
         fitness REAL NOT NULL,
         network TEXT NOT NULL,
         history TEXT,
+        seed INTEGER,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -47,15 +48,23 @@ db.exec(`
     -- 创建索引
     CREATE INDEX IF NOT EXISTS idx_models_created ON models(created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_leaderboard_score ON leaderboard(score DESC);
+    CREATE INDEX IF NOT EXISTS idx_models_score ON models(score DESC);
 `);
+
+// 迁移：为旧表添加 seed 字段（如果不存在）
+try {
+    db.exec(`ALTER TABLE models ADD COLUMN seed INTEGER`);
+} catch (e) {
+    // 字段已存在，忽略错误
+}
 
 /**
  * 保存模型
  */
 export function saveModel(model) {
     const stmt = db.prepare(`
-        INSERT INTO models (name, generation, score, fitness, network, history)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO models (name, generation, score, fitness, network, history, seed)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
 
     const result = stmt.run(
@@ -64,7 +73,8 @@ export function saveModel(model) {
         model.score,
         model.fitness,
         JSON.stringify(model.network),
-        JSON.stringify(model.history)
+        JSON.stringify(model.history),
+        model.seed || null
     );
 
     return result.lastInsertRowid;

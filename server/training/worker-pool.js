@@ -82,7 +82,12 @@ export class WorkerPool {
         let completed = 0;
 
         const promises = agents.map(async (agent, index) => {
-            const result = await this.evaluateAgent(agent, config);
+            // 为每个 Agent 生成唯一种子
+            const agentConfig = {
+                ...config,
+                seed: Date.now() + index + Math.random() * 1000
+            };
+            const result = await this.evaluateAgent(agent, agentConfig);
             results[index] = { agentId: agent.id, ...result };
 
             completed++;
